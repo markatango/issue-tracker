@@ -1,0 +1,71 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg0: #0d0d0f;
+  --bg1: #141417;
+  --bg2: #1c1c20;
+  --bg3: #242428;
+  --bg4: #2e2e33;
+  --border: #2e2e33;
+  --border-bright: #3e3e45;
+  --text0: #e8e8ec;
+  --text1: #b0b0bc;
+  --text2: #72727e;
+  --text3: #484854;
+  --accent: #7c6af7;
+  --accent-dim: #4a3fb5;
+  --accent-glow: rgba(124,106,247,0.15);
+  --green: #3dd68c;
+  --green-bg: rgba(61,214,140,0.1);
+  --yellow: #f5c842;
+  --yellow-bg: rgba(245,200,66,0.1);
+  --red: #f0625a;
+  --red-bg: rgba(240,98,90,0.1);
+  --orange: #f5944a;
+  --orange-bg: rgba(245,148,74,0.1);
+  --blue: #5ab4f5;
+  --blue-bg: rgba(90,180,245,0.1);
+  --mono: 'JetBrains Mono', 'Fira Mono', 'Cascadia Code', 'Consolas', monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --radius: 6px;
+  --radius-lg: 10px;
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--bg0);
+  color: var(--text0);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg1); }
+::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-bright); }
+
+input, textarea, select {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text0);
+  font-family: var(--sans);
+  font-size: 14px;
+  padding: 7px 10px;
+  outline: none;
+  transition: border-color 0.15s;
+  width: 100%;
+}
+input:focus, textarea:focus, select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+select option { background: var(--bg3); }
+textarea { resize: vertical; min-height: 80px; font-family: var(--mono); font-size: 13px; }
+
+button { cursor: pointer; border: none; border-radius: var(--radius); font-family: var(--sans); font-size: 13px; transition: all 0.15s; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
