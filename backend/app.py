@@ -1,7 +1,10 @@
-from flask import Flask, request, jsonify, send_from_directory, abort
+from flask import Flask, request, jsonify, send_from_directory, abort, make_response
 from flask_cors import CORS
-import sqlite3, os, uuid, datetime
+import sqlite3, os, uuid, datetime, io
 from werkzeug.utils import secure_filename
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'issues.db')
@@ -249,6 +252,146 @@ def stats():
         crit   = conn.execute("SELECT COUNT(*) FROM issues WHERE severity='critical'").fetchone()[0]
     return jsonify({'total':total,'open':open_,'in_progress':inprog,'resolved':closed,'critical':crit})
 
+
+
+
+@app.route('/api/export', methods=['GET'])
+def export_issues():
+    with get_db() as conn:
+        issues = conn.execute('SELECT * FROM issues ORDER BY id').fetchall()
+        issues = [dict(i) for i in issues]
+        for issue in issues:
+            atts = conn.execute(
+                'SELECT filename, size, uploaded_at FROM attachments WHERE issue_id=?',
+                (issue['id'],)
+            ).fetchall()
+            issue['attachments'] = [dict(a) for a in atts]
+
+    wb = openpyxl.Workbook()
+
+    # ── colour palette ────────────────────────────────────────────────
+    SEV_FILLS = {
+        'critical': PatternFill('solid', fgColor='3D1A1A'),
+        'high':     PatternFill('solid', fgColor='3D2A10'),
+        'medium':   PatternFill('solid', fgColor='3D3510'),
+        'low':      PatternFill('solid', fgColor='0F2535'),
+    }
+    SEV_FONTS = {
+        'critical': Font(color='F0625A', bold=True),
+        'high':     Font(color='F5944A', bold=True),
+        'medium':   Font(color='F5C842', bold=True),
+        'low':      Font(color='5AB4F5', bold=True),
+    }
+    STATUS_FILLS = {
+        'open':        PatternFill('solid', fgColor='2A1010'),
+        'in-progress': PatternFill('solid', fgColor='2A2510'),
+        'resolved':    PatternFill('solid', fgColor='0F2A1A'),
+    }
+    STATUS_FONTS = {
+        'open':        Font(color='F0625A', bold=True),
+        'in-progress': Font(color='F5C842', bold=True),
+        'resolved':    Font(color='3DD68C', bold=True),
+    }
+    HEADER_FILL = PatternFill('solid', fgColor='1C1C20')
+    HEADER_FONT = Font(color='7C6AF7', bold=True)
+    ROW_FILL_A  = PatternFill('solid', fgColor='141417')
+    ROW_FILL_B  = PatternFill('solid', fgColor='0D0D0F')
+    TEXT_FONT   = Font(color='B0B0BC')
+    WRAP        = Alignment(wrap_text=True, vertical='top')
+    thin        = Side(style='thin', color='2E2E33')
+    BORDER      = Border(bottom=thin)
+
+    def style_header(cell, text):
+        cell.value = text
+        cell.font  = HEADER_FONT
+        cell.fill  = HEADER_FILL
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = Border(bottom=Side(style='medium', color='7C6AF7'))
+
+    def style_cell(cell, row_idx, wrap=False):
+        cell.fill   = ROW_FILL_A if row_idx % 2 == 0 else ROW_FILL_B
+        cell.font   = TEXT_FONT
+        cell.border = BORDER
+        cell.alignment = WRAP if wrap else Alignment(vertical='top')
+
+    # ── Issues sheet ──────────────────────────────────────────────────
+    ws = wb.active
+    ws.title = 'Issues'
+    ws.sheet_view.showGridLines = False
+
+    headers = ['ID', 'Title', 'Severity', 'Status', 'Project', 'Steps to Reproduce', 'Notes', 'Attachments', 'Created', 'Updated']
+    col_widths = [6, 40, 10, 12, 16, 40, 40, 20, 20, 20]
+
+    for col, (h, w) in enumerate(zip(headers, col_widths), 1):
+        style_header(ws.cell(row=1, column=col), h)
+        ws.column_dimensions[get_column_letter(col)].width = w
+
+    ws.row_dimensions[1].height = 22
+    ws.freeze_panes = 'A2'
+
+    for row_idx, issue in enumerate(issues, 2):
+        att_names = ', '.join(a['filename'] for a in issue['attachments']) if issue['attachments'] else ''
+        created = issue['created_at'][:19].replace('T', ' ') if issue['created_at'] else ''
+        updated = issue['updated_at'][:19].replace('T', ' ') if issue['updated_at'] else ''
+
+        values = [
+            issue['id'], issue['title'], issue['severity'], issue['status'],
+            issue['project'] or '', issue['steps'] or '', issue['notes'] or '',
+            att_names, created, updated
+        ]
+
+        for col, val in enumerate(values, 1):
+            cell = ws.cell(row=row_idx, column=col, value=val)
+            wrap = col in (2, 6, 7, 8)
+            style_cell(cell, row_idx, wrap=wrap)
+
+            if col == 3:  # severity
+                cell.fill = SEV_FILLS.get(issue['severity'], ROW_FILL_A)
+                cell.font = SEV_FONTS.get(issue['severity'], TEXT_FONT)
+                cell.alignment = Alignment(horizontal='center', vertical='top')
+            elif col == 4:  # status
+                cell.fill = STATUS_FILLS.get(issue['status'], ROW_FILL_A)
+                cell.font = STATUS_FONTS.get(issue['status'], TEXT_FONT)
+                cell.alignment = Alignment(horizontal='center', vertical='top')
+
+        ws.row_dimensions[row_idx].height = 60
+
+    # ── Attachments sheet ─────────────────────────────────────────────
+    ws2 = wb.create_sheet('Attachments')
+    ws2.sheet_view.showGridLines = False
+
+    att_headers = ['Issue ID', 'Issue Title', 'Filename', 'Size (KB)', 'Uploaded']
+    att_widths   = [10, 40, 40, 12, 20]
+
+    for col, (h, w) in enumerate(zip(att_headers, att_widths), 1):
+        style_header(ws2.cell(row=1, column=col), h)
+        ws2.column_dimensions[get_column_letter(col)].width = w
+
+    ws2.row_dimensions[1].height = 22
+    ws2.freeze_panes = 'A2'
+
+    att_row = 2
+    for issue in issues:
+        for att in issue['attachments']:
+            size_kb = round(att['size'] / 1024, 1) if att['size'] else 0
+            uploaded = att['uploaded_at'][:19].replace('T', ' ') if att['uploaded_at'] else ''
+            vals = [issue['id'], issue['title'], att['filename'], size_kb, uploaded]
+            for col, val in enumerate(vals, 1):
+                cell = ws2.cell(row=att_row, column=col, value=val)
+                style_cell(cell, att_row)
+            ws2.row_dimensions[att_row].height = 18
+            att_row += 1
+
+    # ── Stream response ───────────────────────────────────────────────
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"issues-export-{datetime.date.today().isoformat()}.xlsx"
+    response = make_response(buf.read())
+    response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
 
 
 @app.route('/', defaults={'path': ''})

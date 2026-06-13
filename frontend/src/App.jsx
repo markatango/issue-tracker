@@ -63,6 +63,11 @@ export default function App({ user, onLogout }) {
 
   const setFilter = (k) => (e) => setFilters(f => ({ ...f, [k]: e.target.value }))
 
+  const handleExport = () => {
+    const base = window.location.pathname.startsWith('/issues') ? '/issues/api' : '/api'
+    window.open(`${base}/export`, '_blank')
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
       <header style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '0 20px', height: 50, flexShrink: 0, background: 'var(--bg1)', borderBottom: '1px solid var(--border)' }}>
@@ -75,6 +80,7 @@ export default function App({ user, onLogout }) {
           </div>
         )}
         <div style={{ flex: 1 }} />
+        <Btn variant="default" onClick={handleExport} style={{ fontSize: 13, padding: '5px 14px' }}>⬇ Export</Btn>
         <Btn variant="primary" onClick={() => { setCreating(true); setSelected(null) }} style={{ fontSize: 13, padding: '5px 14px' }}>+ New Issue</Btn>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 8, paddingLeft: 12, borderLeft: '1px solid var(--border)' }}>
           {user.photoURL && <img src={user.photoURL} style={{ width: 24, height: 24, borderRadius: '50%' }} />}
